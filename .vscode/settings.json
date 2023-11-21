@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "*.cpp": "cpp",
+        "concepts": "c",
+        "type_traits": "c"
+    }
+}
