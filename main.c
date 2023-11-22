@@ -63,7 +63,12 @@ int chunk_list_find(const Chunk_List *list, void *ptr)
 
 void chunk_list_remove(Chunk_List *list, size_t index)
 {
-    UNIMPLEMENTED;
+    assert(index < list->count);
+    for (size_t i = index; i < list->count - 1; i++) 
+    {
+        list->chunks[i] = list->chunks[i + 1];
+    }
+    list->count--;
 }
 
 void chunk_list_insert(Chunk_List *list, void *start, size_t size)
@@ -126,17 +131,18 @@ void heap_collect()
     UNIMPLEMENTED;
 }
 
-void *asd[26];
 
 int main(void)
 {
-
-    for (int i = 0; i < 26; i++) {
-        asd[i] = heap_alloc(i);
+    for (int i = 0; i < 10; i++) {
+        void *p = heap_alloc(i);
+        if (i % 2 == 0) {
+            heap_free(p);
+        }
     }
 
     chunk_list_dump(&alloced_chunks);
-    printf("%d\n", chunk_list_find(&alloced_chunks, 0x560db8d510b8));
+    chunk_list_dump(&freed_chunks);
 
     return 0;
 }
