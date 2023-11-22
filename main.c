@@ -28,6 +28,40 @@ typedef struct {
 
 
 
+void chunk_list_compress(Chunk_List *list)
+{
+    size_t i = 0;
+    for (size_t j = 0; j < list->count; j++) {
+        if (list->chunks[j].start == NULL) continue;
+        while (i < j && list->chunks[i].start != NULL) i++;
+        SWAP(Chunk, list->chunks[i], list->chunks[j]);
+    }
+    list->count = i + 1;
+}
+
+void chunk_list_merge(Chunk_List *list)
+{
+    if (list->count == 0) return;
+    bool need_to_compress = false;
+    for (int i = list->count - 2; i >= 0; i--) {
+        Chunk chunk = list->chunks[i], next_chunk = list->chunks[i + 1];
+
+        if (chunk.start + chunk.size == next_chunk.start) {
+            list->chunks[i].size += list->chunks[i + 1].size;
+
+            list->chunks[i + 1].start = NULL;
+            list->chunks[i + 1].size = 0;
+
+            need_to_compress = true;
+        }
+    }
+    if (need_to_compress) {
+        chunk_list_compress(list);
+    }
+}
+
+
+
 /// @brief print Allocated chunks and their length
 /// @param  
 void chunk_list_dump(const Chunk_List *list)
@@ -87,10 +121,14 @@ void chunk_list_insert(Chunk_List *list, void *start, size_t size)
 }
 
 char heap[HEAP_CAP] = {0};
-size_t heap_size = 0;
 
 Chunk_List alloced_chunks = {0};
-Chunk_List freed_chunks = {0};
+Chunk_List freed_chunks = {
+    .count = 1,
+    .chunks = {
+        [0] = {.start = heap, .size = sizeof(heap)}
+    }
+};
 
 
 /// @brief allocate {size} of bytes in the heap
@@ -98,16 +136,31 @@ Chunk_List freed_chunks = {0};
 /// @return return ptr to allocated memory 
 void *heap_alloc(size_t size)
 {
-    if (size > 0) {
-        assert(heap_size + size <= HEAP_CAP);
-        void *ptr = heap + heap_size;
-        heap_size += size;
-        chunk_list_insert(&alloced_chunks, ptr, size);
-        return ptr;
+    if (size <= 0) return NULL;
+
+    int pos = -1;
+    size_t best_fit = HEAP_CAP;
+    for (size_t i = 0; i < freed_chunks.count && best_fit > 0; i++) {
+        if (freed_chunks.chunks[i].size - size < best_fit) {
+            pos = i;
+            best_fit = freed_chunks.chunks[i].size - size;
+        }
     }
-    else {
+
+    if (pos == -1) {
         return NULL;
+    } 
+
+    Chunk chunk = freed_chunks.chunks[pos];
+
+    chunk_list_insert(&alloced_chunks, chunk.start, size);
+    chunk_list_remove(&freed_chunks, pos);
+    if (best_fit != 0) {
+        chunk_list_insert(&freed_chunks, chunk.start + size, best_fit);
     }
+    
+    chunk_list_merge(&freed_chunks);
+    return chunk.start;
 }
 
 
@@ -119,6 +172,7 @@ void heap_free(void *ptr)
     if (ptr == NULL) return;
     const int index = chunk_list_find(&alloced_chunks, ptr);   
     assert(index >= 0);
+    assert(ptr == alloced_chunks.chunks[index].start);
     chunk_list_insert(&freed_chunks,
         alloced_chunks.chunks[index].start, alloced_chunks.chunks[index].size);
     chunk_list_remove(&alloced_chunks, (size_t) index);
@@ -131,18 +185,26 @@ void heap_collect()
     UNIMPLEMENTED;
 }
 
+#define N 10
+
+void *ptrs[N] = {0};
 
 int main(void)
 {
-    for (int i = 0; i < 10; i++) {
-        void *p = heap_alloc(i);
-        if (i % 2 == 0) {
-            heap_free(p);
-        }
+    srand(70);
+
+    for (int i = 0; i < N; i++) {
+        ptrs[i] = heap_alloc(i);
     }
 
+    for (int i = 0; i < N; i++) {
+        if (i % 2 == 0) {
+            heap_free(ptrs[i]);
+        }
+    }
+    
     chunk_list_dump(&alloced_chunks);
     chunk_list_dump(&freed_chunks);
-
+    
     return 0;
 }
